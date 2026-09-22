@@ -1,0 +1,163 @@
+#include <ESP32Servo.h>
+#include <Wire.h>
+#include <Adafruit_GFX.h>
+#include <Adafruit_SSD1306.h>
+
+Servo meuServo;
+
+// ---------------- PINOS ----------------
+#define SERVO_PIN 23
+#define TRIG_PIN 12
+#define ECHO_PIN 14
+#define LED_PIN 4
+
+// ---------------- OLED ----------------
+#define LARGURA_OLED 128
+#define ALTURA_OLED 64
+#define OLED_RESET -1
+#define OLED_ENDERECO 0x3C
+
+Adafruit_SSD1306 telaOLED(
+  LARGURA_OLED,
+  ALTURA_OLED,
+  &Wire,
+  OLED_RESET
+);
+
+// ---------------- CONFIGURAÇÕES ----------------
+#define DISTANCIA_ABERTURA 90
+#define DISTANCIA_FECHAMENTO 110
+
+bool catracaAberta = false;
+
+// ------------------------------------------------
+// Função para atualizar o OLED
+// ------------------------------------------------
+void mostrarOLED(const char* mensagem) {
+
+  telaOLED.clearDisplay();
+
+  telaOLED.setTextSize(1);
+  telaOLED.setTextColor(SSD1306_WHITE);
+
+  telaOLED.setCursor(0, 10);
+  telaOLED.println(mensagem);
+
+  telaOLED.display();
+}
+
+// ------------------------------------------------
+// Setup
+// ------------------------------------------------
+void setup() {
+
+  Serial.begin(115200);
+
+  // Servo
+  meuServo.attach(SERVO_PIN);
+  meuServo.write(0);
+
+  // Sensor ultrassônico
+  pinMode(TRIG_PIN, OUTPUT);
+  pinMode(ECHO_PIN, INPUT);
+
+  // LED
+  pinMode(LED_PIN, OUTPUT);
+  digitalWrite(LED_PIN, LOW);
+
+  // OLED
+  if (!telaOLED.begin(SSD1306_SWITCHCAPVCC, OLED_ENDERECO)) {
+
+    Serial.println("Erro ao iniciar o OLED");
+
+    while (true) {
+      delay(1000);
+    }
+  }
+
+  mostrarOLED("Sistema iniciado");
+
+  Serial.println("Sistema iniciado!");
+}
+
+// ------------------------------------------------
+// Mede a distância
+// ------------------------------------------------
+float medirDistancia() {
+
+  digitalWrite(TRIG_PIN, LOW);
+  delayMicroseconds(2);
+
+  digitalWrite(TRIG_PIN, HIGH);
+  delayMicroseconds(10);
+
+  digitalWrite(TRIG_PIN, LOW);
+
+  long duracao = pulseIn(ECHO_PIN, HIGH, 30000);
+
+  if (duracao == 0) {
+    return -1;
+  }
+
+  float distancia = (duracao * 0.0343) / 2.0;
+
+  return distancia;
+}
+
+// ------------------------------------------------
+// Loop
+// ------------------------------------------------
+void loop() {
+
+  float distancia = medirDistancia();
+
+  // Sem leitura válida
+  if (distancia < 0) {
+
+    Serial.println("Nenhum eco recebido.");
+
+    delay(100);
+
+    return;
+  }
+
+  Serial.print("Distancia: ");
+  Serial.print(distancia);
+  Serial.println(" cm");
+
+  // ---------------- ABRIR ----------------
+
+  if (distancia <= DISTANCIA_ABERTURA && !catracaAberta) {
+
+    meuServo.write(90);
+
+    digitalWrite(LED_PIN, HIGH);
+
+    catracaAberta = true;
+
+    mostrarOLED("Abrindo catraca");
+
+    Serial.println("Objeto detectado!");
+    Serial.println("Abrindo Servo");
+    Serial.println("LED ligado");
+  }
+
+  // ---------------- FECHAR ----------------
+
+  else if (distancia >= DISTANCIA_FECHAMENTO && catracaAberta) {
+
+    meuServo.write(0);
+
+    digitalWrite(LED_PIN, LOW);
+
+    catracaAberta = false;
+
+    mostrarOLED("Fechando catraca");
+
+    Serial.println("Nenhum objeto proximo.");
+    Serial.println("Fechando Servo");
+    Serial.println("LED desligado");
+  }
+
+  delay(100);
+}
